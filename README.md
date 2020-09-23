@@ -1,2 +1,2 @@
-# tumlaidee_chat_server
+# Tumlaidee chat server
 Chat server of Tum Lai Dee.
