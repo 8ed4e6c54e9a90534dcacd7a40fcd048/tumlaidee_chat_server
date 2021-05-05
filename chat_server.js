@@ -18,59 +18,47 @@ io.on('connection', socket => {
     // client.on('disconnect', () => {
     // console.log('============================')
 
-    socket.on('send message', async (endedAt, user, target, msg, isPicture) => {
-        console.log("_id", endedAt);
-        console.log("user", user);
-        console.log("target", target);
-        console.log("msg", msg);
+    socket.on('send message', async (_id, msg, limit) => {
+        console.log("limit",limit);
 
-
-        // const chatList = await Chats.find({ $and: [{ 'user': { $in: [user] } }, { 'user': { $in: [target] } }] });
-        const chatList = await Chats.find({ 'endedAt': endedAt });
-        console.log("chatList", chatList);
-
-        if (!chatList.length) {
-            const new_Date = + new Date();
-            const Chat = new Chats({
-                user: [user, target],
-                endedAt: new_Date,
-                messages: [
-                    {
-                        user: target,
-                        message: isPicture === true ? '' : msg,
-                        isRead: true
-                    },
-                ]
-            });
-            Chat.save(function (err, doc) {
-                if (err) return console.error(err);
-                console.log("Document inserted succussfully!");
-              
-            });
-        } else {
-            let messages = {
-                user: user,
-                message: isPicture === true ? '' : msg,
-                isRead: true
-            }
-
-
-            Chats.updateOne({ 'endedAt': endedAt }, {
-                $push:
-                    { 'messages': messages }
-            }, { upsert: true }, function (err, docs) {
-               
-            });
-            const newChatList = await Chats.find({ 'endedAt': endedAt });
-            io.sockets.emit('receive message', newChatList);
+        let messages = {
+            user: msg.user,
+            message: msg.isPicture === true ? '' : msg.msg,
+            isRead: true
         }
+        Chats.updateOne({ '_id': _id }, {
+            $push:
+                { 'messages': messages }
+        }, { upsert: true }, function (err, docs) {
+        });
+        await Chats.find({ "_id": _id }, function (err, chats) {
+            console.log("chats", chats);
+            let new_messages = []
+            let newdata = (chats !== undefined ? chats[0].messages.reverse() : [])
+            for (let i = 0; i < newdata.length; i++) {
+                if (i < limit) {
+                    new_messages.push(newdata[i])
+                } else {
+                    break;
+                }
+            }
+        console.log("new_messages",new_messages);
+
+            const res = {
+                _id: chats[0]._id,
+                user: chats[0].user,
+                endedAt: chats[0].endedAt,
+                res_messages: new_messages.reverse()
+            }
+            io.sockets.emit('receive message' + _id, res);
+        });
 
     })
-    socket.on('read message', async (user, target) => {
-        console.log("user", user);
-        console.log("target", target);
+    socket.on('read message', async (user, target, limit) => {
+        console.log("limit",limit);
         const chatList = await Chats.find({ $and: [{ 'user': { $in: [user] } }, { 'user': { $in: [target] } }] });
-        let newData = [];
+        console.log("chatList",chatList);
+
         if (!chatList.length) {
             const new_Date = + new Date();
             const Chat = new Chats({
@@ -82,22 +70,41 @@ io.on('connection', socket => {
                 if (err) return console.error(err);
                 console.log("Document inserted succussfully!");
             });
-            const newchatList = await Chats.find({ $and: [{ 'user': { $in: [user] } }, { 'user': { $in: [target] } }] });
+            const chatList = await Chats.find({ $and: [{ 'user': { $in: [user] } }, { 'user': { $in: [target] } }] });
+            io.sockets.emit('receive new message' + user + target, chatList);
 
-            newData = newchatList
         } else {
-            newData = chatList
+            await Chats.find({ $and: [{ 'user': { $in: [user] } }, { 'user': { $in: [target] } }] }, function (err, chats) {
+                let new_messages = []
+            console.log("chats", chats);
 
+                let newdata = (chats !== undefined ? chats[0].messages.reverse() : [])
+        console.log("newdata",newdata);
+
+                for (let i = 0; i < newdata.length; i++) {
+                    if (i < limit) {
+                        new_messages.push(newdata[i])
+                    } else {
+                        break;
+                    }
+                }
+
+      
+        console.log("new_messages",new_messages);
+
+                const res = {
+                    _id: chats[0]._id,
+                    user: chats[0].user,
+                    endedAt: chats[0].endedAt,
+                    res_messages: new_messages.reverse()
+                }
+                io.sockets.emit('receive new message' + user + target, res);
+            });
         }
-        io.sockets.emit('receive message', newData);
+
 
     });
 
 })
 
-// _remove = (client_id) => {
-//     for (let i = 0; i < user_in_page.length; i++) {
-//         user_in_page[i].users = user_in_page[i].users.filter(val => val.client_id !== client_id)
-//     }
-// }
 server.listen(port, () => console.log(`Listening on port ${port}`))
